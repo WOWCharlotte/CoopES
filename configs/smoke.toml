@@ -1,0 +1,30 @@
+# Small ARC-Challenge + Qwen2.5 smoke run.
+# For reproducible model pinning, replace model_digest after `ollama show`.
+[data]
+dataset = "arc_challenge"
+revision = "210d026faf9955653af8916fad021475a3f00453"
+candidate_count = 8
+calibration_count = 8
+test_count = 20
+split_seed = 42
+
+[inference]
+backend = "ollama"
+base_url = "http://127.0.0.1:11434"
+model_tag = "qwen2.5:7b"
+model_digest = "auto"
+timeout_seconds = 300.0
+max_attempts = 3
+
+[inference.decode]
+seed = 42
+max_new_tokens = 8
+context_window = 8192
+
+[selection]
+shot_count = 2
+num_samples = 32
+sample_seed = 42
+random_seed = 42
+random_trials = 10
+epsilon = 0.05
