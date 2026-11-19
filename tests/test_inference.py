@@ -179,6 +179,7 @@ def test_transformers_backend_strips_prompt_tokens() -> None:
         pad_token_id = 0
         eos_token_id = 0
         padding_side = "right"
+        chat_template = "fake-template"
 
         def apply_chat_template(self, messages, **kwargs):
             return "prompt"
@@ -230,6 +231,7 @@ def test_transformers_backend_rejects_short_context() -> None:
     class Tokenizer:
         pad_token_id = 0
         eos_token_id = 0
+        chat_template = "fake-template"
 
         def apply_chat_template(self, messages, **kwargs):
             return "prompt"

@@ -31,6 +31,17 @@ if TYPE_CHECKING:  # pragma: no cover - imported only for type checking
 BackendName = Literal["ollama", "transformers"]
 DTypeName = Literal["float32", "float16", "bfloat16"]
 
+LLAMA3_CHAT_TEMPLATE = (
+    "{{ bos_token }}"
+    "{% for message in messages %}"
+    "{{ '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n'"
+    " + message['content'] | trim + '<|eot_id|>' }}"
+    "{% endfor %}"
+    "{% if add_generation_prompt %}"
+    "{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}"
+    "{% endif %}"
+)
+
 
 @dataclass(frozen=True)
 class DecodeConfig:
@@ -120,6 +131,7 @@ def _template_digest() -> str:
             SYSTEM_PROMPT,
             OPENBOOKQA_USER_TEMPLATE,
             ARC_USER_TEMPLATE,
+            LLAMA3_CHAT_TEMPLATE,
         )
     )
     return sha256(payload.encode("utf-8")).hexdigest()
@@ -275,11 +287,21 @@ def _generate_transformers(
     tokenizer.padding_side = "left"
 
     try:
+        template_kwargs: dict[str, str] = {}
+        if not getattr(tokenizer, "chat_template", None):
+            marker_id = tokenizer.convert_tokens_to_ids("<|start_header_id|>")
+            if marker_id == tokenizer.unk_token_id:
+                raise InferenceError(
+                    "tokenizer has no chat template and cannot use the "
+                    "Llama 3 fallback"
+                )
+            template_kwargs["chat_template"] = LLAMA3_CHAT_TEMPLATE
         texts = [
             tokenizer.apply_chat_template(
                 [asdict(message) for message in request.messages],
                 tokenize=False,
                 add_generation_prompt=True,
+                **template_kwargs,
             )
             for request in requests
         ]
@@ -309,6 +331,7 @@ def _generate_transformers(
                 do_sample=False,
                 num_beams=1,
                 max_new_tokens=config.decode.max_new_tokens,
+                max_length=None,
                 pad_token_id=tokenizer.pad_token_id,
             )
     except InferenceError:
@@ -330,6 +353,7 @@ def _generate_transformers(
     decoded = tokenizer.batch_decode(
         new_tokens,
         skip_special_tokens=True,
+        clean_up_tokenization_spaces=False,
     )
     if len(decoded) != len(requests):
         raise InferenceError("Transformers returned an invalid response count")

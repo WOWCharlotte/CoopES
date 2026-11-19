@@ -32,6 +32,14 @@ coopes --config configs/smoke.toml --run-dir runs/smoke
 - `predictions.jsonl`、`metrics.csv`、`summary.json`
 - `cache.sqlite3`，用于断点续跑和复用逐题生成结果
 
+
+完整 Transformers 配置位于 `configs/full-*.toml`，覆盖 OpenBookQA /
+ARC-Challenge 与本地 Qwen2.5-7B-Instruct /
+Meta-Llama-3-8B-Instruct 的组合。2026-11-19 的 Instruct 完整运行结果见
+`docs/experiments/2026-11-19-llama3-instruct-results.md`。2026-11-18 的
+历史运行使用旧 Meta-Llama-3-8B 基座权重，结果见
+`docs/experiments/2026-11-18-full-transformers-results.md`。
+
 `configs/smoke-transformers.toml` 展示本地 Transformers 后端配置。正式
 实验前应把 `model_digest` 固定为 `ollama show` 返回的摘要，或为
 Transformers 配置固定模型提交。

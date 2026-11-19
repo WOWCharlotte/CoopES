@@ -1,0 +1,29 @@
+# Full reproduction run: arc_challenge x qwen.
+[data]
+dataset = "arc_challenge"
+revision = "210d026faf9955653af8916fad021475a3f00453"
+candidate_count = 50
+calibration_count = 50
+test_count = 500
+split_seed = 42
+
+[inference]
+backend = "transformers"
+model_id = "/home/model/Qwen2.5-7B-Instruct"
+revision = "local-d3b8f5a961945310ad260269142108435f9771b72233343424f927bb39408da4"
+device = "cuda:0"
+dtype = "bfloat16"
+batch_size = 32
+
+[inference.decode]
+seed = 42
+max_new_tokens = 1
+context_window = 8192
+
+[selection]
+shot_count = 4
+num_samples = 200
+sample_seed = 42
+random_seed = 42
+random_trials = 10
+epsilon = 0.05
