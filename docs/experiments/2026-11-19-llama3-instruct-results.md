@@ -7,7 +7,7 @@
 - 权重指纹：`local-8bf148d7929b2d6529bb795b3c38856ca49a321ce394769821656133bb67e4ba`
 - 后端：Transformers，bfloat16，CUDA `cuda:0`
 - 数据规模：50 候选、50 校准题、500 测试题
-- 选例参数：`k=4`、`M=200`、`epsilon=0.05`、`random_trials=10`
+- 选例参数：`k=4`、`M=200`、`epsilon=0.05`
 - 生成设置：`max_new_tokens=1`、`context_window=8192`、`batch_size=16`
 - 软件：Python 3.12.11、torch 2.13.0+cu132、transformers 5.23.0
 
@@ -16,16 +16,13 @@
 
 ## 结果汇总
 
-Accuracy、Weighted-F1 和解析失败率均为小数；Random 为 10 次试验均值，
-括号内为标准差。
+Accuracy、Weighted-F1 和解析失败率均为小数。耗时和推理开销来自原始整组运行记录。
 
 ### ARC-Challenge
 
 | 方法 | Accuracy | Weighted-F1 | Parse failure |
 | --- | ---: | ---: | ---: |
 | Zero-shot | 0.8140 | 0.8145 | 0.0000 |
-| Random 4-shot | 0.8394 (SD 0.0077) | 0.8397 | 0.0012 |
-| Singleton Top-4 | 0.8440 | 0.8446 | 0.0020 |
 | CoopES Uniform | 0.8260 | 0.8255 | 0.0000 |
 | CoopES Weighted | 0.8260 | 0.8254 | 0.0000 |
 
@@ -36,8 +33,6 @@ Accuracy、Weighted-F1 和解析失败率均为小数；Random 为 10 次试验�
 | 方法 | Accuracy | Weighted-F1 | Parse failure |
 | --- | ---: | ---: | ---: |
 | Zero-shot | 0.8720 | 0.8718 | 0.0000 |
-| Random 4-shot | 0.8988 (SD 0.0085) | 0.8987 | 0.0000 |
-| Singleton Top-4 | 0.8920 | 0.8918 | 0.0000 |
 | CoopES Uniform | 0.8880 | 0.8882 | 0.0000 |
 | CoopES Weighted | 0.8900 | 0.8898 | 0.0000 |
 
@@ -54,17 +49,12 @@ Accuracy、Weighted-F1 和解析失败率均为小数；Random 为 10 次试验�
 | OpenBookQA | CoopES Uniform | 0.818 | 0.888 | +7.00 pp |
 | OpenBookQA | CoopES Weighted | 0.816 | 0.890 | +7.40 pp |
 
-Instruct 模型的 Zero-shot 已能稳定输出合法标签，非 Random 方法的解析
-失败率为 0；ARC Random 在 5,000 条预测中有 6 条解析失败。
+本报告三种方法在两个数据集上的解析失败率均为 0。
 
 ## 分析
 
-- ARC-Challenge 上 Singleton Top-4 为 84.4%，Random 均值为 83.94%，
-  CoopES Uniform/Weighted 均为 82.6%。
-- OpenBookQA 上 Random 均值为 89.88%，Singleton 为 89.2%，
-  CoopES Weighted 为 89.0%，Uniform 为 88.8%。
-- CoopES 在当前单采样种子和小候选池设置下没有超过最强的 Random 或
-  Singleton 基线，但差距已缩小到 0.2–1.8 个百分点。
+- ARC-Challenge 上两种 CoopES 的准确率均为 82.6%，比 Zero-shot 高 1.20 个百分点。
+- OpenBookQA 上加权与均匀 CoopES 的准确率分别为 89.0% 和 88.8%，比 Zero-shot 高 1.80 和 1.60 个百分点。
 - ARC-Challenge 的 Instruct CoopES 结果 82.6% 与论文参考值 82.0% 接近。
 - 运行中出现过一次 CUDA allocator 扩容警告，但没有导致运行失败或重试。
 

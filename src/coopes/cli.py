@@ -50,8 +50,6 @@ from .selection import (
 
 METHOD_ORDER: tuple[Method, ...] = (
     "zero_shot",
-    "random",
-    "singleton",
     "coopes_uniform",
     "coopes_weighted",
 )
@@ -268,6 +266,17 @@ def _load_decode(
     return config
 
 
+def _active_selection_options(
+    selection: Mapping[str, object],
+) -> dict[str, object]:
+    """Drop retired baseline options from legacy configuration."""
+
+    options = dict(selection)
+    options.pop("random_seed", None)
+    options.pop("random_trials", None)
+    return options
+
+
 def load_config(config_path: Path) -> RunConfig:
     """Load and strictly validate a TOML experiment configuration."""
 
@@ -365,13 +374,13 @@ def load_config(config_path: Path) -> RunConfig:
             "config.inference.backend must be 'ollama' or 'transformers'"
         )
 
-    selection = _table(payload, "selection", "config")
+    selection = _active_selection_options(
+        _table(payload, "selection", "config")
+    )
     selection_fields = {
         "shot_count",
         "num_samples",
         "sample_seed",
-        "random_seed",
-        "random_trials",
         "epsilon",
     }
     _check_fields(selection, selection_fields, "config.selection")
@@ -381,10 +390,6 @@ def load_config(config_path: Path) -> RunConfig:
             selection, "num_samples", "config.selection"
         ),
         sample_seed=_integer(selection, "sample_seed", "config.selection"),
-        random_seed=_integer(selection, "random_seed", "config.selection"),
-        random_trials=_positive_int(
-            selection, "random_trials", "config.selection"
-        ),
         epsilon=_positive_float(selection, "epsilon", "config.selection"),
     )
     if selection_config.shot_count > data_config.candidate_count:
@@ -407,7 +412,21 @@ def prepare_run(
         raise FileExistsError(
             f"run directory {run_dir} already contains summary.json"
         )
-    _load_or_write_json(run_dir / "config.json", _config_payload(config))
+    config_path = run_dir / "config.json"
+    expected = _config_payload(config)
+    if config_path.exists():
+        saved = _load_json(config_path)
+        if isinstance(saved, dict):
+            selection = saved.get("selection")
+            if isinstance(selection, dict):
+                saved["selection"] = _active_selection_options(selection)
+        if saved != expected:
+            raise ValueError(
+                f"existing artifact {config_path} "
+                "does not match the current run"
+            )
+    else:
+        _atomic_write_json(config_path, expected)
     _load_or_write_json(run_dir / "splits.json", _splits_payload(splits))
 
 

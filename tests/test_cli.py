@@ -42,6 +42,27 @@ def test_prepare_run_rejects_completed_run(tmp_path: Path) -> None:
         prepare_run(tmp_path, config, splits)
 
 
+def test_legacy_selection_settings_are_compatible(tmp_path: Path) -> None:
+    source = Path(__file__).resolve().parents[1] / "configs" / "smoke.toml"
+    legacy = tmp_path / "legacy.toml"
+    options = {"random_seed": 42, "random_trials": 10}
+    legacy.write_text(
+        source.read_text(encoding="utf-8")
+        + "".join(f"\n{key} = {value}" for key, value in options.items()),
+        encoding="utf-8",
+    )
+    config = load_config(source)
+    assert load_config(legacy) == config
+    splits = DatasetSplits((), (), ())
+    prepare_run(tmp_path, config, splits)
+
+    snapshot = tmp_path / "config.json"
+    payload = json.loads(snapshot.read_text(encoding="utf-8"))
+    payload["selection"].update(options)
+    snapshot.write_text(json.dumps(payload), encoding="utf-8")
+    prepare_run(tmp_path, config, splits)
+
+
 def _plan() -> SelectionPlan:
     scores = (
         CandidateScore("a", 0.2, 8),
@@ -68,19 +89,19 @@ def test_selection_artifacts_are_written(tmp_path: Path) -> None:
     assert payload["trials"][1]["candidate_ids"] == ["a", "b"]
 
 
-def test_evaluation_artifacts_mean_random_trials(
+def test_evaluation_artifacts_aggregate_same_method(
     tmp_path: Path,
 ) -> None:
     metrics_a = EvaluationMetrics(2, 0.5, 0.5, 0.0)
     metrics_b = EvaluationMetrics(2, 1.0, 1.0, 0.0)
     reports = [
         TrialReport(
-            SelectionTrial("random", 1, ("a", "b")),
+            SelectionTrial("coopes_uniform", 1, ("a", "b")),
             EvaluationResult((), metrics_a),
             1.0,
         ),
         TrialReport(
-            SelectionTrial("random", 2, ("a", "b")),
+            SelectionTrial("coopes_uniform", 2, ("a", "b")),
             EvaluationResult((), metrics_b),
             1.0,
         ),
@@ -101,8 +122,8 @@ def test_evaluation_artifacts_mean_random_trials(
         stats,
         3.0,
     )
-    assert summary.method_metrics["random"].mean_accuracy == 0.75
+    assert summary.method_metrics["coopes_uniform"].mean_accuracy == 0.75
     payload = json.loads(
         (tmp_path / "summary.json").read_text(encoding="utf-8")
     )
-    assert payload["method_metrics"]["random"]["trial_count"] == 2
+    assert payload["method_metrics"]["coopes_uniform"]["trial_count"] == 2

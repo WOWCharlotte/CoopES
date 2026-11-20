@@ -24,6 +24,4 @@ context_window = 8192
 shot_count = 4
 num_samples = 200
 sample_seed = 42
-random_seed = 42
-random_trials = 10
 epsilon = 0.05

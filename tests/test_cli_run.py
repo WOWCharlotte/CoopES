@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import json
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -97,8 +99,6 @@ def test_run_experiment_writes_complete_artifact_set(
             shot_count=2,
             num_samples=4,
             sample_seed=42,
-            random_seed=42,
-            random_trials=2,
             epsilon=0.05,
         ),
     )
@@ -107,7 +107,11 @@ def test_run_experiment_writes_complete_artifact_set(
 
     summary = run_experiment(config, tmp_path)
     assert summary.method_metrics["coopes_uniform"].mean_accuracy == 1.0
-    assert summary.method_metrics["random"].trial_count == 2
+    methods = {"zero_shot", "coopes_uniform", "coopes_weighted"}
+    assert set(summary.method_metrics) == methods
+    assert all(
+        item.trial_count == 1 for item in summary.method_metrics.values()
+    )
     expected = {
         "cache.sqlite3",
         "config.json",
@@ -120,3 +124,18 @@ def test_run_experiment_writes_complete_artifact_set(
         "summary.json",
     }
     assert expected <= {path.name for path in tmp_path.iterdir()}
+    selections_path = tmp_path / "selections.json"
+    plan = json.loads(selections_path.read_text(encoding="utf-8"))
+    assert {trial["method"] for trial in plan["trials"]} == methods
+    predictions_path = tmp_path / "predictions.jsonl"
+    prediction_text = predictions_path.read_text(encoding="utf-8")
+    predictions = [json.loads(line) for line in prediction_text.splitlines()]
+    assert len(predictions) == len(methods) * len(splits.test)
+    assert {prediction["method"] for prediction in predictions} == methods
+    with (tmp_path / "metrics.csv").open(encoding="utf-8", newline="") as file:
+        assert {row["method"] for row in csv.DictReader(file)} == methods
+    scores = tmp_path / "candidate_scores.csv"
+    with scores.open(encoding="utf-8", newline="") as file:
+        assert {row["method"] for row in csv.DictReader(file)} == (
+            methods - {"zero_shot"}
+        )

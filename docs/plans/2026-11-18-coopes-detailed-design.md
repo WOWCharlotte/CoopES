@@ -1,6 +1,6 @@
 # CoopES 详细设计说明
 
-本设计细化已有复现方案，适用于从空目录实现 `src/coopes/`。第一版覆盖 OpenBookQA 与 ARC-Challenge、Ollama 与 Transformers 推理、零样本与随机基线、单示例排序、均匀与加权 CoopES，以及用 SHAP 核对标准 Shapley 值。[CoopES 复现方案](../reproduction-plan.md)
+本设计细化已有复现方案，覆盖 OpenBookQA 与 ARC-Challenge、Ollama 与 Transformers 推理，以及 Zero-shot、CoopES Uniform 和 CoopES Weighted。SHAP 用于核对标准 Shapley 值。[CoopES 复现方案](../reproduction-plan.md)
 
 ## 1. 模块边界和调用关系
 
@@ -96,7 +96,7 @@ def write_evaluation_artifacts(
 ) -> RunSummary: ...
 ```
 
-按方法聚合每次试验的指标。随机基线对配置指定的各次试验求指标的算术平均，主实验使用 10 次。逐题结果保留其 `trial_index`。依次写入 `predictions.jsonl`、`metrics.csv`，最后写 `summary.json`。各文件均用临时文件写完后原子替换。返回与总结文件同内容的 `RunSummary`。
+按方法聚合各次试验的指标。主实验每种方法执行一次，逐题结果保留 `trial_index`。依次写入 `predictions.jsonl`、`metrics.csv`，最后写 `summary.json`。各文件均用临时文件写完后原子替换。返回与总结文件同内容的 `RunSummary`。
 
 **`run_experiment`（2 个形参）**
 
@@ -361,13 +361,13 @@ def snapshot_stats(self) -> InferenceStats: ...
 
 ### 实体和变量
 
-- `Method = Literal["zero_shot", "random", "singleton", "coopes_uniform", "coopes_weighted"]`。`ShapMethod = Literal["exact", "permutation"]`。
+- `Method = Literal["zero_shot", "coopes_uniform", "coopes_weighted"]`。`ShapMethod = Literal["exact", "permutation"]`。
 - `UtilityFunction = Callable[[tuple[str, ...]], float]`。输入是去重且按 ID 排序的候选元组，空元组表示零样本，输出是同一校准集上的准确率。
-- `SelectionConfig` 包含 `shot_count: int`、`num_samples: int`、`sample_seed: int`、`random_seed: int`、`random_trials: int`、`epsilon: float`。`shot_count` 对应论文的 $k$，`num_samples` 对应 $M$。主实验使用 `shot_count=4`、`num_samples=200`、`random_trials=10`、`epsilon=0.05`。
-- `CandidateScore` 包含 `candidate_id: str`、`score: float | None`、`sample_count: int`。边际贡献估计的 `sample_count` 是该候选进入前缀的次数，单例评分记为 1。
+- `SelectionConfig` 包含 `shot_count: int`、`num_samples: int`、`sample_seed: int`、`epsilon: float`。`shot_count` 对应论文的 $k$，`num_samples` 对应 $M$。主实验使用 `shot_count=4`、`num_samples=200`、`epsilon=0.05`。
+- `CandidateScore` 包含 `candidate_id: str`、`score: float | None`、`sample_count: int`。`sample_count` 是该候选进入前缀的次数。
 - `SelectionTrial` 包含 `method: Method`、`trial_index: int`、`candidate_ids: tuple[str, ...]`。试验序号从 1 开始。`SelectionPlan` 包含 `trials: tuple[SelectionTrial, ...]`、`scores: dict[Method, tuple[CandidateScore, ...]]`、`missing_by_method: dict[Method, tuple[str, ...]]`。只有发生缺失的方法进入 `missing_by_method`。
 - 采样变量 `rng: np.random.Generator`、`remaining: list[str]` 和 `probabilities: NDArray[np.float64]`。贡献累加使用 `gain_by_id: dict[str, float]` 和 `count_by_id: dict[str, int]`。`previous_value: float` 与 `next_value: float` 分别记录加入前、加入后的效用。
-- `singleton_values: dict[str, float]` 保存 $V(\{e\})$，可同时用作单例基线的分数与加权的输入。`SHAP_EXACT_MAX_CANDIDATES = 12` 为设计中的精确计算上限，小规模核对用 6 个候选。
+- `weights: dict[str, float]` 保存 $\epsilon+V(\{e\})$，用于加权采样。`SHAP_EXACT_MAX_CANDIDATES = 12` 为设计中的精确计算上限，小规模核对用 6 个候选。
 
 ### 核心函数
 
@@ -419,7 +419,7 @@ def build_selection_plan(
 ) -> SelectionPlan: ...
 ```
 
-先生成零样本选集和独立抽取的 `random_trials` 组随机选集，随机基线用 `random_seed`。计算每个候选的单例效用，再由 $w_e=\epsilon+V(\{e\})$ 得到加权采样权重。分别调用 `estimate_marginal_contributions` 产生均匀和加权结果，两次估计分别从相同 `sample_seed` 初始化。三种评分方法均用 `rank_candidates` 产生选集。若某一方法有零观测候选，记录缺失 ID 并省略该方法的选集。返回所有候选评分、已生成的试验和覆盖信息，交给 CLI 决定能否进入测试。
+先创建空选集用于 Zero-shot。计算每个候选的单示例效用，再由 $w_e=\epsilon+V(\{e\})$ 得到加权采样权重。分别调用 `estimate_marginal_contributions` 产生均匀和加权结果，两次估计分别从相同 `sample_seed` 初始化。两种 CoopES 均用 `rank_candidates` 生成选集。若某一方法有零观测候选，记录缺失 ID 并省略该方法的选集。返回候选评分、已生成的试验和覆盖信息，交给 CLI 决定能否进入测试。
 
 **`compute_shapley`（5 个形参）**
 
@@ -513,14 +513,14 @@ def evaluate_trial(
 | 阶段 | 调用顺序 | 输出或状态 |
 | --- | --- | --- |
 | 配置与划分 | `main → load_config / run_experiment`。`run_experiment → load_splits → normalize_question / sample_questions`。 | 解析后的配置、三组题目及 `splits.json` |
-| 基线与校准 | `run_experiment → make_utility / build_selection_plan`。`build_selection_plan → utility → predict_questions / grade_predictions`。 | 空集和单例效用、基线选集 |
+| 校准 | `run_experiment → make_utility / build_selection_plan`。`build_selection_plan → utility → predict_questions / grade_predictions`。 | 空集效用和加权采样权重 |
 | CoopES 估计 | `build_selection_plan → estimate_marginal_contributions / rank_candidates`。`estimate_marginal_contributions → draw_prefix / utility`。 | 每个候选的分数与出现次数、冻结选集 |
 | SHAP 核对 | `compute_shapley → SHAP 解释器 → 二值掩码适配器 → utility` | 按 ID 索引的标准 Shapley 值 |
 | 逐题预测 | `predict_questions → build_prompt / InferenceEngine.generate_batch / parse_answer`。`InferenceEngine.generate_batch → InferenceEngine._generate_missing_batch → 后端批次函数`。 | 按题目顺序返回的答案、逐题生成缓存 |
 | 测试与评分 | `run_experiment → evaluate_trial → predict_questions / grade_predictions / compute_metrics` | 每次试验的逐题评分与指标 |
 | 导出 | `run_experiment → write_selection_artifacts`（测试前），`run_experiment → write_evaluation_artifacts`（测试后） | 候选评分、选集、逐题预测、试验指标和运行总结 |
 
-表中的斜杠表示同一调用方依次调用多个函数。零样本和随机基线在选例阶段直接确定选集，测试指标统一在 `evaluate_trial` 中计算。
+表中的斜杠表示同一调用方依次调用多个函数。Zero-shot 使用空选集，三种方法的测试指标统一在 `evaluate_trial` 中计算。
 
 ## 9. Python 代码风格和验收
 
@@ -535,5 +535,5 @@ def evaluate_trial(
 | 采样与 SHAP | 固定种子重复执行得到同一排名。用 6 个候选枚举完整排列与 SHAP 精确值逐项对照。另用截断前缀的期望值检查截断估计，校验计数总和为 $Mk$。 |
 | 覆盖不足 | 让某候选在采样中零次出现，评分文件保留其缺失记录，CLI 在开始测试前明确中止。 |
 | 推理和缓存 | 用测试替身让两种后端按相同契约返回原始文本。缓存命中时后端调用数不增加。模拟后续批次失败，已提交的批次仍可复用。 |
-| 评估和报告 | 用包含字母标签、数字标签及无效输出的固定样本核对指标。Random 按试验计算后取均值。用 ARC-C × Qwen2.5-7B 小规模配置检查产物和断点续跑。 |
+| 评估和报告 | 用包含字母标签、数字标签及无效输出的固定样本核对指标。检查产物只展示三种方法，并用 ARC-C × Qwen2.5-7B 小规模配置检查断点续跑。 |
 | 代码结构 | 审查每个核心函数的职责及行数、导入方向、类型注解和 PEP 8 格式。 |

@@ -12,8 +12,6 @@ from numpy.typing import NDArray
 
 Method = Literal[
     "zero_shot",
-    "random",
-    "singleton",
     "coopes_uniform",
     "coopes_weighted",
 ]
@@ -25,13 +23,11 @@ SHAP_EXACT_MAX_CANDIDATES = 12
 
 @dataclass(frozen=True)
 class SelectionConfig:
-    """Parameterization of random and cooperative selection."""
+    """Parameterization of cooperative selection."""
 
     shot_count: int
     num_samples: int
     sample_seed: int
-    random_seed: int
-    random_trials: int
     epsilon: float
 
 
@@ -77,8 +73,6 @@ def _validate_config(config: SelectionConfig) -> None:
         raise ValueError("shot_count must be positive")
     if config.num_samples <= 0:
         raise ValueError("num_samples must be positive")
-    if config.random_trials <= 0:
-        raise ValueError("random_trials must be positive")
     if not math.isfinite(config.epsilon) or config.epsilon <= 0:
         raise ValueError("epsilon must be a finite positive number")
 
@@ -226,7 +220,7 @@ def build_selection_plan(
     utility: UtilityFunction,
     config: SelectionConfig,
 ) -> SelectionPlan:
-    """Construct zero-shot, random, singleton, and CoopES selections."""
+    """Construct zero-shot and both CoopES selections."""
 
     candidates = _unique_ids(candidate_ids)
     _validate_config(config)
@@ -237,32 +231,9 @@ def build_selection_plan(
     trials: list[SelectionTrial] = [
         SelectionTrial(method="zero_shot", trial_index=1, candidate_ids=())
     ]
-    random_rng = np.random.default_rng(config.random_seed)
-    for trial_index in range(1, config.random_trials + 1):
-        selection = draw_prefix(
-            ordered_ids,
-            config.shot_count,
-            random_rng,
-        )
-        trials.append(
-            SelectionTrial(
-                method="random",
-                trial_index=trial_index,
-                candidate_ids=selection,
-            )
-        )
-
-    singleton_scores = tuple(
-        CandidateScore(
-            candidate_id=item,
-            score=_utility_value(utility, (item,)),
-            sample_count=1,
-        )
-        for item in ordered_ids
-    )
     weights = {
-        score.candidate_id: config.epsilon + float(score.score)
-        for score in singleton_scores
+        item: config.epsilon + _utility_value(utility, (item,))
+        for item in ordered_ids
     }
 
     uniform_scores = estimate_marginal_contributions(
@@ -278,47 +249,24 @@ def build_selection_plan(
     )
 
     scores: dict[Method, tuple[CandidateScore, ...]] = {
-        "singleton": singleton_scores,
         "coopes_uniform": uniform_scores,
         "coopes_weighted": weighted_scores,
     }
     missing_by_method: dict[Method, tuple[str, ...]] = {}
-    for method, method_scores in (
-        ("coopes_uniform", uniform_scores),
-        ("coopes_weighted", weighted_scores),
-    ):
+    for method, method_scores in scores.items():
         missing = _missing_candidates(method_scores)
         if missing:
             missing_by_method[method] = missing
-
-    scored_trials: list[SelectionTrial] = [
-        SelectionTrial(
-            method="singleton",
-            trial_index=1,
-            candidate_ids=rank_candidates(singleton_scores, config.shot_count),
-        )
-    ]
-    if "coopes_uniform" not in missing_by_method:
-        scored_trials.append(
+            continue
+        trials.append(
             SelectionTrial(
-                method="coopes_uniform",
+                method=method,
                 trial_index=1,
                 candidate_ids=rank_candidates(
-                    uniform_scores, config.shot_count
+                    method_scores, config.shot_count
                 ),
             )
         )
-    if "coopes_weighted" not in missing_by_method:
-        scored_trials.append(
-            SelectionTrial(
-                method="coopes_weighted",
-                trial_index=1,
-                candidate_ids=rank_candidates(
-                    weighted_scores, config.shot_count
-                ),
-            )
-        )
-    trials.extend(scored_trials)
     return SelectionPlan(
         trials=tuple(trials),
         scores=scores,

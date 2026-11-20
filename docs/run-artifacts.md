@@ -16,7 +16,7 @@ coopes \
 
 ## 总体流程
 
-`src/coopes/cli.py:542` 的 `run_experiment()` 依次完成配置加载、数据切分、候选评分、冻结选例和测试集评估。各文件的生产关系如下：
+`src/coopes/cli.py` 的 `run_experiment()` 依次完成配置加载、数据切分、候选评分、冻结选例和测试集评估。各文件的生产关系如下：
 
 ```text
 config.toml
@@ -74,7 +74,7 @@ runs/full-arc_challenge-qwen/
 
 ## `config.json`
 
-对应 `RunConfig` 数据类，见 `src/coopes/cli.py:60`。它是 TOML 配置经严格校验后生成的 JSON 快照，包含 `data`、`inference` 和 `selection` 三部分。
+对应 `src/coopes/cli.py` 的 `RunConfig` 数据类。它是 TOML 配置经校验后生成的 JSON 快照，包含 `data`、`inference` 和 `selection` 三部分。
 
 示例配置的主要字段：
 
@@ -97,15 +97,13 @@ runs/full-arc_challenge-qwen/
 | `selection.shot_count` | `4` | 每个 prompt 使用的示例数 `k` |
 | `selection.num_samples` | `200` | 边际贡献估计的采样轮数 `M` |
 | `selection.sample_seed` | `42` | 前缀采样种子 |
-| `selection.random_seed` | `42` | Random 基线种子 |
-| `selection.random_trials` | `10` | Random 基线 trial 数 |
 | `selection.epsilon` | `0.05` | 加权 CoopES 的平滑系数 |
 
-配置解析和校验位于 `src/coopes/cli.py:271` 的 `load_config()`。该文件用于复现实验和断点续跑，不直接参与模型推理。
+`src/coopes/cli.py` 的 `load_config()` 解析和校验配置。该文件用于复现实验和断点续跑。
 
 ## `splits.json`
 
-由 `_splits_payload()` 生成，见 `src/coopes/cli.py:164`。它保存本次运行实际使用的三组数据：
+由 `src/coopes/cli.py` 的 `_splits_payload()` 生成，保存本次运行实际使用的三个数据集合。
 
 ```json
 {
@@ -196,13 +194,10 @@ CREATE TABLE generation_cache (
 
 ## `candidate_scores.csv`
 
-由 `write_selection_artifacts()` 输出，见 `src/coopes/cli.py:414`。该文件只包含需要逐个评估候选的方法：
+由 `src/coopes/cli.py` 的 `write_selection_artifacts()` 输出。该文件记录两种 CoopES 的候选评分。
 
-- `singleton`
 - `coopes_uniform`
 - `coopes_weighted`
-
-`zero_shot` 没有候选示例，`random` 直接随机抽样，因此它们不会出现在该文件中。
 
 字段如下：
 
@@ -210,16 +205,10 @@ CREATE TABLE generation_cache (
 | --- | --- |
 | `method` | 评分方法 |
 | `candidate_id` | 候选题 ID |
-| `score` | 候选的效用或平均边际贡献 |
-| `sample_count` | 候选被采样或评估的次数 |
+| `score` | 候选的平均边际贡献 |
+| `sample_count` | 候选进入采样前缀的次数 |
 
-### Singleton 分数
-
-`singleton` 把每个候选单独作为 1-shot 示例，在标定集上计算准确率：
-
-```text
-score_i = V({i})
-```
+### 组合效用
 
 组合效用 `V(S)` 是由 `make_utility()` 创建的标定集准确率，见 `src/coopes/evaluation.py:113`。其计算方式是：
 
@@ -228,11 +217,9 @@ score_i = V({i})
 3. 用解析出的答案与标定集标准答案比较；
 4. 返回 `正确题数 / 标定题总数`。
 
-Singleton 每个候选只评估一次，因此 `sample_count = 1`。示例运行中 singleton 分数范围为 `0.88` 到 `0.94`。
-
 ### CoopES 边际贡献
 
-`coopes_uniform` 和 `coopes_weighted` 使用 `estimate_marginal_contributions()`，见 `src/coopes/selection.py:135`。
+`coopes_uniform` 和 `coopes_weighted` 使用 `src/coopes/selection.py` 的 `estimate_marginal_contributions()`。
 
 算法如下：
 
@@ -261,9 +248,9 @@ score[e] = gain[e] / count[e]
 weight_i = epsilon + V({i})
 ```
 
-即 `singleton` 效用加 `epsilon`，见 `src/coopes/selection.py:263`。示例运行中 `epsilon = 0.05`。
+其中 `V({i})` 是单独使用候选 `i` 时的标定集准确率。示例运行中 `epsilon = 0.05`。
 
-最终排序规则见 `rank_candidates()`，位于 `src/coopes/selection.py:194`：
+最终排序由 `src/coopes/selection.py` 的 `rank_candidates()` 完成。
 
 ```text
 按 score 降序；
@@ -291,7 +278,7 @@ coopes_weighted top-4:
 
 ## `selections.json`
 
-由 `build_selection_plan()` 生成，见 `src/coopes/selection.py:224`，并由 `write_selection_artifacts()` 写出。
+由 `src/coopes/selection.py` 的 `build_selection_plan()` 生成，并由 `write_selection_artifacts()` 写出。
 
 文件结构：
 
@@ -308,11 +295,11 @@ coopes_weighted top-4:
 }
 ```
 
-每个 trial 的结构对应 `SelectionTrial`，见 `src/coopes/selection.py:48`：
+每个 trial 对应 `src/coopes/selection.py` 的 `SelectionTrial`。
 
 | 字段 | 含义 |
 | --- | --- |
-| `method` | `zero_shot`、`random`、`singleton`、`coopes_uniform` 或 `coopes_weighted` |
+| `method` | `zero_shot`、`coopes_uniform` 或 `coopes_weighted` |
 | `trial_index` | 同一方法下的 trial 编号 |
 | `candidate_ids` | 冻结的 few-shot 示例 ID |
 
@@ -320,15 +307,13 @@ coopes_weighted top-4:
 各方法含义：
 
 - `zero_shot`：`candidate_ids` 为空，prompt 中不提供示例；
-- `random`：从候选池随机抽取 `shot_count` 个候选，重复 `random_trials` 次；
-- `singleton`：按单示例标定集准确率排序后取前 `k` 个；
 - `coopes_uniform`：按均匀采样的平均边际贡献排序后取前 `k` 个；
 - `coopes_weighted`：按加权采样的平均边际贡献排序后取前 `k` 个。
 
 
 ## `predictions.jsonl`
 
-这是逐题预测文件，每行一个 JSON 对象，由 `write_evaluation_artifacts()` 写出，见 `src/coopes/cli.py:447`。
+这是逐题预测文件，每行一个 JSON 对象，由 `src/coopes/cli.py` 的 `write_evaluation_artifacts()` 写出。
 
 一行对应：
 
@@ -368,7 +353,7 @@ coopes_weighted top-4:
 
 ## `metrics.csv`
 
-由 `write_evaluation_artifacts()` 输出，每个 trial 一行，见 `src/coopes/cli.py:447`。
+由 `src/coopes/cli.py` 的 `write_evaluation_artifacts()` 输出，每个 trial 一行。
 
 字段如下：
 
@@ -407,14 +392,12 @@ sklearn.metrics.f1_score(
 | 方法 | trial 数 | Accuracy | Weighted-F1 | Parse failure |
 | --- | ---: | ---: | ---: | ---: |
 | `zero_shot` | 1 | 0.894 | 0.894604 | 0.000 |
-| `random` | 10 | 0.9124 | 0.915128 | 0.0044 |
-| `singleton` | 1 | 0.910 | 0.912580 | 0.004 |
 | `coopes_uniform` | 1 | 0.914 | 0.917527 | 0.006 |
 | `coopes_weighted` | 1 | 0.908 | 0.910592 | 0.004 |
 
 ## `summary.json`
 
-这是整个运行的最终汇总文件，由 `write_evaluation_artifacts()` 写出，见 `src/coopes/cli.py:526`。主要包含四部分。
+这是整个运行的最终汇总文件，由 `src/coopes/cli.py` 的 `write_evaluation_artifacts()` 写出。下文的耗时与推理开销示例取自原始整组运行。
 
 ### `method_metrics`
 

@@ -18,8 +18,6 @@ def _config(**overrides: object) -> SelectionConfig:
         "shot_count": 2,
         "num_samples": 8,
         "sample_seed": 42,
-        "random_seed": 7,
-        "random_trials": 3,
         "epsilon": 0.05,
     }
     values.update(overrides)
@@ -66,7 +64,7 @@ def test_rank_candidates_breaks_ties_by_id() -> None:
     assert rank_candidates(scores, 2) == ("c", "a")
 
 
-def test_build_selection_plan_contains_all_baselines() -> None:
+def test_build_selection_plan_contains_only_requested_methods() -> None:
     ids = ("a", "b", "c", "d")
     utility_by_id = {"a": 0.1, "b": 0.8, "c": 0.4, "d": 0.2}
 
@@ -74,19 +72,14 @@ def test_build_selection_plan_contains_all_baselines() -> None:
         return sum(utility_by_id[item] for item in selected) / 10
 
     plan = build_selection_plan(ids, utility, _config())
-    methods = [trial.method for trial in plan.trials]
-    assert methods.count("random") == 3
-    assert set(methods) == {
+    assert [trial.method for trial in plan.trials] == [
         "zero_shot",
-        "random",
-        "singleton",
         "coopes_uniform",
         "coopes_weighted",
-    }
-    singleton = next(
-        trial for trial in plan.trials if trial.method == "singleton"
-    )
-    assert singleton.candidate_ids == ("b", "c")
+    ]
+    assert plan.trials[0].candidate_ids == ()
+    assert all(trial.candidate_ids == ("b", "c") for trial in plan.trials[1:])
+    assert set(plan.scores) == {"coopes_uniform", "coopes_weighted"}
     assert not plan.missing_by_method
 
 

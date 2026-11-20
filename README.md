@@ -2,8 +2,8 @@
 
 CoopES 的可运行复现实现：在候选示例池上用校准集估计前缀边际贡献，选出
 Top-k 示例后冻结选集，并在独立测试集上评价。第一版支持 OpenBookQA /
-ARC-Challenge、Ollama / Transformers 后端、随机与单示例基线、均匀与加权
-CoopES，以及 SHAP 标准 Shapley 值核对。
+ARC-Challenge、Ollama / Transformers 后端，以及 SHAP 标准 Shapley 值核对。
+实验评估 Zero-shot、CoopES Uniform 和 CoopES Weighted。
 
 ## 安装
 
