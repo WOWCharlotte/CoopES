@@ -1,0 +1,13 @@
+dataset,model,method,trials,accuracy,accuracy_std,weighted_f1,parse_failure_rate,run_elapsed_seconds,submitted_inputs,backend_calls,cache_hits,batch_size
+OpenBookQA,Qwen2.5-7B-Instruct,zero_shot,1,0.932,0.0,0.933813115433002,0.004,2190.4524292179995,65900,5168,500,16
+OpenBookQA,Qwen2.5-7B-Instruct,coopes_uniform,1,0.93,0.0,0.9384085607750403,0.018,2190.4524292179995,65900,5168,500,16
+OpenBookQA,Qwen2.5-7B-Instruct,coopes_weighted,1,0.93,0.0,0.9384085607750403,0.018,2190.4524292179995,65900,5168,500,16
+OpenBookQA,Meta-Llama-3-8B,zero_shot,1,0.0,0.0,0.0,1.0,2406.596319356,66250,5188,0,16
+OpenBookQA,Meta-Llama-3-8B,coopes_uniform,1,0.818,0.0,0.8203891473989601,0.002,2406.596319356,66250,5188,0,16
+OpenBookQA,Meta-Llama-3-8B,coopes_weighted,1,0.816,0.0,0.8180537045636541,0.0,2406.596319356,66250,5188,0,16
+ARC-Challenge,Qwen2.5-7B-Instruct,zero_shot,1,0.894,0.0,0.8946043376527283,0.0,2782.7484593390004,66550,2606,0,32
+ARC-Challenge,Qwen2.5-7B-Instruct,coopes_uniform,1,0.914,0.0,0.9175268550096136,0.006,2782.7484593390004,66550,2606,0,32
+ARC-Challenge,Qwen2.5-7B-Instruct,coopes_weighted,1,0.908,0.0,0.9105919084926205,0.004,2782.7484593390004,66550,2606,0,32
+ARC-Challenge,Meta-Llama-3-8B,zero_shot,1,0.0,0.0,0.0,1.0,2981.9703808879985,65800,5152,0,16
+ARC-Challenge,Meta-Llama-3-8B,coopes_uniform,1,0.702,0.0,0.6972743882114306,0.0,2981.9703808879985,65800,5152,0,16
+ARC-Challenge,Meta-Llama-3-8B,coopes_weighted,1,0.7,0.0,0.6969673074661105,0.0,2981.9703808879985,65800,5152,0,16

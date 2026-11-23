@@ -1,0 +1,27 @@
+# Full reproduction run: arc_challenge x llama3. (ModelScope Meta-Llama-3-8B-Instruct)
+[data]
+dataset = "arc_challenge"
+revision = "210d026faf9955653af8916fad021475a3f00453"
+candidate_count = 50
+calibration_count = 50
+test_count = 500
+split_seed = 42
+
+[inference]
+backend = "transformers"
+model_id = "/home/model/Meta-Llama-3-8B"
+revision = "local-8bf148d7929b2d6529bb795b3c38856ca49a321ce394769821656133bb67e4ba"
+device = "cuda:0"
+dtype = "bfloat16"
+batch_size = 16
+
+[inference.decode]
+seed = 42
+max_new_tokens = 1
+context_window = 8192
+
+[selection]
+shot_count = 4
+num_samples = 200
+sample_seed = 42
+epsilon = 0.05
